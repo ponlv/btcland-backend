@@ -5,6 +5,7 @@ import (
 	"api/business/dashboard"
 	"api/business/departments"
 	"api/business/healthcheck"
+	"api/business/images"
 	"api/business/profile"
 	"api/business/teams"
 	workconfirmations "api/business/work-confirmations"
@@ -14,6 +15,10 @@ import (
 
 func InitRouter(r *gin.Engine) {
 	r.GET("healthcheck", healthcheck.Healthcheck())
+
+	// Images routes (public - no auth required)
+	imagesRouter := r.Group("images")
+	images.Router(imagesRouter)
 
 	// Auth routes
 	authRouter := r.Group("auth")

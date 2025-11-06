@@ -11,7 +11,8 @@ func Router(r *gin.RouterGroup) {
 	r.Use(middleware.AuthMiddleware())
 
 	// Routes cho Quản lý (Manager) - quản lý team của mình
-	r.GET("my-team", GetMyTeam())                              // Get my team
+	r.GET("my-team", GetMyTeam())                              // Get my team (employees)
+	r.GET("my-team-info", GetMyTeamInfo())                     // Get my team info (department/team details)
 	r.GET("my-employees", ListMyEmployees())                   // List my employees
 	r.GET("my-employees/:employee_id", GetEmployeeByID())      // Get employee by ID
 	r.POST("add-employee", AddEmployee())                      // Add employee

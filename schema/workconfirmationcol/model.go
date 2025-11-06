@@ -44,9 +44,11 @@ type WorkConfirmation struct {
 	CreatorRole usercol.Role `json:"creator_role" bson:"creator_role"` // employee, manager, leader, assistant_director
 
 	// Thông tin đơn
-	Date    string  `json:"date" bson:"date"`       // YYYY-MM-DD
-	Content string  `json:"content" bson:"content"` // Nội dung công tác
-	Photos  []Photo `json:"photos" bson:"photos"`   // Danh sách hình ảnh
+	Date      string  `json:"date" bson:"date"`             // YYYY-MM-DD
+	StartTime string  `json:"start_time" bson:"start_time"` // HH:MM (24-hour format)
+	EndTime   string  `json:"end_time" bson:"end_time"`     // HH:MM (24-hour format)
+	Content   string  `json:"content" bson:"content"`       // Nội dung công tác
+	Photos    []Photo `json:"photos" bson:"photos"`         // Danh sách hình ảnh
 
 	// Trạng thái
 	Status WorkConfirmationStatus `json:"status" bson:"status"`

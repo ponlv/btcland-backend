@@ -47,12 +47,28 @@ func Create() gin.HandlerFunc {
 			return
 		}
 
-		// Lấy date và content từ form
+		// Lấy date, time và content từ form
 		date := c.PostForm("date")
+		startTime := c.PostForm("start_time")
+		endTime := c.PostForm("end_time")
 		content := c.PostForm("content")
 
 		if date == "" {
 			code := response.ErrorResponse("date is required")
+			c.JSON(http.StatusBadRequest, code)
+			c.Abort()
+			return
+		}
+
+		if startTime == "" {
+			code := response.ErrorResponse("start_time is required")
+			c.JSON(http.StatusBadRequest, code)
+			c.Abort()
+			return
+		}
+
+		if endTime == "" {
+			code := response.ErrorResponse("end_time is required")
 			c.JSON(http.StatusBadRequest, code)
 			c.Abort()
 			return
@@ -69,6 +85,33 @@ func Create() gin.HandlerFunc {
 		_, err = time.Parse("2006-01-02", date)
 		if err != nil {
 			code := response.ErrorResponse("Invalid date format. Expected YYYY-MM-DD")
+			c.JSON(http.StatusBadRequest, code)
+			c.Abort()
+			return
+		}
+
+		// Validate time format (HH:MM)
+		_, err = time.Parse("15:04", startTime)
+		if err != nil {
+			code := response.ErrorResponse("Invalid start_time format. Expected HH:MM (24-hour format)")
+			c.JSON(http.StatusBadRequest, code)
+			c.Abort()
+			return
+		}
+
+		_, err = time.Parse("15:04", endTime)
+		if err != nil {
+			code := response.ErrorResponse("Invalid end_time format. Expected HH:MM (24-hour format)")
+			c.JSON(http.StatusBadRequest, code)
+			c.Abort()
+			return
+		}
+
+		// Validate end_time > start_time
+		startTimeObj, _ := time.Parse("15:04", startTime)
+		endTimeObj, _ := time.Parse("15:04", endTime)
+		if !endTimeObj.After(startTimeObj) {
+			code := response.ErrorResponse("end_time must be after start_time")
 			c.JSON(http.StatusBadRequest, code)
 			c.Abort()
 			return
@@ -159,12 +202,14 @@ func Create() gin.HandlerFunc {
 			CreatedBy:   user.GetIDString(),
 			CreatorRole: creatorRole,
 			Date:        date,
+			StartTime:   startTime,
+			EndTime:     endTime,
 			Content:     content,
 			Photos:      photos,
 			Status:      status,
 		}
 
-		id, err := workconfirmationcol.Create(c.Request.Context(), workConfirmation)
+		_, err = workconfirmationcol.Create(c.Request.Context(), workConfirmation)
 		if err != nil {
 			logger.Err(err).Msg("failed to create work confirmation")
 			code := response.ErrorResponse("Failed to create work confirmation")
@@ -174,7 +219,7 @@ func Create() gin.HandlerFunc {
 		}
 
 		// Lấy lại đơn vừa tạo để trả về
-		created, err := workconfirmationcol.FindByID(c.Request.Context(), id.(string))
+		created, err := workconfirmationcol.FindByID(c.Request.Context(), workConfirmation.GetIDString())
 		if err != nil {
 			if errors.Is(err, mongo.ErrNoDocuments) {
 				code := response.ErrorResponse("Work confirmation not found")
@@ -192,4 +237,3 @@ func Create() gin.HandlerFunc {
 		c.JSON(http.StatusOK, response.SuccessResponse(created))
 	}
 }
-

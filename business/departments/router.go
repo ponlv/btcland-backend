@@ -12,6 +12,8 @@ func Router(r *gin.RouterGroup) {
 
 	// Routes cho Lãnh đạo (Leader) - quản lý tất cả teams/departments
 	r.GET("", List())                                              // GET /teams - Lấy danh sách tất cả team (chỉ lãnh đạo)
+	r.GET("users", ListUsers())                                    // GET /teams/users - Lấy danh sách tất cả users (chỉ lãnh đạo)
+	r.PUT("users/:user_id/role", UpdateUserRole())                 // PUT /teams/users/:user_id/role - Cập nhật vai trò của user (chỉ lãnh đạo)
 	r.GET(":id", GetByID())                                        // GET /teams/:id - Lấy chi tiết team
 	r.POST("", Create())                                           // POST /teams - Tạo team mới
 	r.PUT(":id", Update())                                         // PUT /teams/:id - Cập nhật team

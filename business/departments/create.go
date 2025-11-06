@@ -80,7 +80,7 @@ func Create() gin.HandlerFunc {
 			ManagerID:   req.ManagerID,
 		}
 
-		id, err := teamcol.Create(c.Request.Context(), team)
+		_, err := teamcol.Create(c.Request.Context(), team)
 		if err != nil {
 			logger.Err(err).Msg("failed to create team")
 			code := response.ErrorResponse("Failed to create team")
@@ -90,7 +90,7 @@ func Create() gin.HandlerFunc {
 		}
 
 		// Lấy lại team vừa tạo
-		created, err := teamcol.FindByID(c.Request.Context(), id.(string))
+		created, err := teamcol.FindByID(c.Request.Context(), team.GetIDString())
 		if err != nil {
 			logger.Err(err).Msg("failed to get created team")
 			code := response.ErrorResponse("Team created but failed to retrieve")
@@ -102,4 +102,3 @@ func Create() gin.HandlerFunc {
 		c.JSON(http.StatusOK, response.SuccessResponse(created))
 	}
 }
-

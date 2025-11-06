@@ -88,8 +88,10 @@ func Update() gin.HandlerFunc {
 			return
 		}
 
-		// Lấy date và content từ form
+		// Lấy date, time và content từ form
 		date := c.PostForm("date")
+		startTime := c.PostForm("start_time")
+		endTime := c.PostForm("end_time")
 		content := c.PostForm("content")
 
 		// Cập nhật thông tin
@@ -103,6 +105,62 @@ func Update() gin.HandlerFunc {
 				return
 			}
 			workConfirmation.Date = date
+		}
+
+		if startTime != "" {
+			// Validate time format
+			_, err := time.Parse("15:04", startTime)
+			if err != nil {
+				code := response.ErrorResponse("Invalid start_time format. Expected HH:MM (24-hour format)")
+				c.JSON(http.StatusBadRequest, code)
+				c.Abort()
+				return
+			}
+			workConfirmation.StartTime = startTime
+		}
+
+		if endTime != "" {
+			// Validate time format
+			_, err := time.Parse("15:04", endTime)
+			if err != nil {
+				code := response.ErrorResponse("Invalid end_time format. Expected HH:MM (24-hour format)")
+				c.JSON(http.StatusBadRequest, code)
+				c.Abort()
+				return
+			}
+			workConfirmation.EndTime = endTime
+		}
+
+		// Validate end_time > start_time if both are provided
+		if startTime != "" && endTime != "" {
+			startTimeObj, _ := time.Parse("15:04", startTime)
+			endTimeObj, _ := time.Parse("15:04", endTime)
+			if !endTimeObj.After(startTimeObj) {
+				code := response.ErrorResponse("end_time must be after start_time")
+				c.JSON(http.StatusBadRequest, code)
+				c.Abort()
+				return
+			}
+		} else if startTime != "" && workConfirmation.EndTime != "" {
+			// If only startTime is updated, validate against existing endTime
+			startTimeObj, _ := time.Parse("15:04", startTime)
+			endTimeObj, _ := time.Parse("15:04", workConfirmation.EndTime)
+			if !endTimeObj.After(startTimeObj) {
+				code := response.ErrorResponse("end_time must be after start_time")
+				c.JSON(http.StatusBadRequest, code)
+				c.Abort()
+				return
+			}
+		} else if endTime != "" && workConfirmation.StartTime != "" {
+			// If only endTime is updated, validate against existing startTime
+			startTimeObj, _ := time.Parse("15:04", workConfirmation.StartTime)
+			endTimeObj, _ := time.Parse("15:04", endTime)
+			if !endTimeObj.After(startTimeObj) {
+				code := response.ErrorResponse("end_time must be after start_time")
+				c.JSON(http.StatusBadRequest, code)
+				c.Abort()
+				return
+			}
 		}
 
 		if content != "" {

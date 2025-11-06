@@ -15,15 +15,12 @@ import (
 func Login() func(c *gin.Context) {
 	logger := plog.NewBizLogger("[business][auth][google][login]")
 	type req struct {
-		DeviceID    string `json:"device_id"`
 		DeviceName  string `json:"device_name"`
 		BrowserName string `json:"browser_name"`
 		Platform    string `json:"platform" binding:"required"`
 	}
 
 	return func(c *gin.Context) {
-		deviceID := c.Query("device_id")
-		deviceName := c.Query("device_name")
 		browserName := c.Query("browser_name")
 		platform := c.Query("platform")
 
@@ -42,8 +39,6 @@ func Login() func(c *gin.Context) {
 		parameters.Add("redirect_uri", google.OAuthConfig.RedirectURL)
 		parameters.Add("response_type", "code")
 		parameters.Add("state", google.OAuthConfig.OAuthStateString)
-		parameters.Add("device_id", deviceID)
-		parameters.Add("device_name", deviceName)
 		parameters.Add("browser_name", browserName)
 		parameters.Add("platform", platform)
 		URL.RawQuery = parameters.Encode()
