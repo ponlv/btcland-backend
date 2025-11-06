@@ -1,0 +1,63 @@
+---
+alwaysApply: true
+---
+
+# Build Rules
+
+## 🔨 Automatic Build Process
+
+### Always Run Go Build
+**ALWAYS RUN** `go build` after making any changes to Go code:
+
+```bash
+go build
+```
+
+### Build Commands
+- **Basic build**: `go build`
+- **Build with race detection**: `go build -race`
+- **Build for specific OS**: `go build -o fanxipan-backend`
+- **Build with optimization**: `go build -ldflags="-s -w"`
+
+### Build Triggers
+Run `go build` when:
+- ✅ Creating new Go files
+- ✅ Modifying existing Go files
+- ✅ Changing function signatures
+- ✅ Updating imports
+- ✅ Modifying struct definitions
+- ✅ Changing JWT or authentication code
+- ✅ Updating API handlers
+- ✅ Modifying database models
+
+### Build Verification
+After `go build`:
+- ✅ Check for compilation errors
+- ✅ Verify no syntax errors
+- ✅ Ensure all imports are resolved
+- ✅ Confirm no unused variables
+- ✅ Validate type safety
+
+### Error Handling
+If build fails:
+1. **Fix compilation errors** immediately
+2. **Resolve import issues**
+3. **Update function calls** to match new signatures
+4. **Re-run build** until successful
+
+### Best Practices
+- **Build early and often** during development
+- **Test build** after each significant change
+- **Verify build** before committing code
+- **Use build flags** for different environments
+
+### Example Workflow
+```bash
+# After making changes to Go code
+go build
+
+# If successful, continue development
+# If failed, fix errors and rebuild
+```
+
+This ensures code quality and prevents runtime issues.

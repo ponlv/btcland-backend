@@ -1,0 +1,539 @@
+---
+alwaysApply: true
+---
+# Business Logic Rules
+
+## 📁 Structure & Organization
+
+### Directory Structure
+```
+business/
+├── auth/                    # Authentication & authorization
+│   ├── login/              # Login functionality
+│   ├── register/           # User registration
+│   ├── forgotpass/         # Password recovery
+│   ├── google/             # Google OAuth
+│   └── router.go           # Auth routes
+├── account/                # User account management
+│   ├── kyc/               # KYC verification
+│   ├── token/             # Token management
+│   └── router.go          # Account routes
+├── payment/               # Payment processing
+│   ├── account/           # Bank account management
+│   └── router.go          # Payment routes
+├── transaction/           # Transaction handling
+│   ├── deposit/           # Deposit operations
+│   │   ├── fiat/         # Fiat deposits
+│   │   └── crypto/       # Crypto deposits
+│   ├── withdraw/         # Withdrawal operations
+│   └── router.go         # Transaction routes
+├── user/                 # User management
+├── wallet/               # Wallet operations
+├── category/             # Product categories
+├── document/             # Document management
+├── country/              # Country data
+├── stats/                # Statistics
+├── healthcheck/          # Health monitoring
+└── idtokens/             # ID token management
+```
+
+### File Naming Convention
+- **Handler files**: Use descriptive names (e.g., `login.go`, `create_account.go`)
+- **Router files**: Always named `router.go`
+- **Type files**: Use `types.go` for type definitions
+- **Subdirectories**: Use lowercase with underscores for multi-word names
+
+## 🎯 Handler Function Patterns
+
+### 1. Standard Handler Structure
+```go
+func HandlerName() gin.HandlerFunc {
+    logger := plog.NewBizLogger("[module][submodule][handler]")
+    
+    return func(c *gin.Context) {
+        // 1. Authentication/Authorization check
+        user, exist := c.Get("current_user")
+        if !exist {
+            code := response.ErrorResponse("Unauthorized")
+            c.JSON(code.Code, code)
+            c.Abort()
+            return
+        }
+        
+        // 2. Request validation
+        var req RequestData
+        if err := c.BindJSON(&req); err != nil {
+            code := response.ErrorResponse(err.Error())
+            c.JSON(code.Code, code)
+            c.Abort()
+            return
+        }
+        
+        // 3. Business logic execution
+        res, err := doHandlerName(c, req, user)
+        if err != nil {
+            logger.Err(err).Msg("failed to execute handler")
+            code := response.ErrorResponse(err.Error())
+            c.JSON(code.Code, code)
+            c.Abort()
+            return
+        }
+        
+        // 4. Success response
+        c.JSON(http.StatusOK, response.SuccessResponse(res))
+        return
+    }
+}
+```
+
+### 2. Business Logic Function Pattern
+```go
+func doHandlerName(c *gin.Context, req RequestData, user *usercol.User) (*ResponseData, error) {
+    logger := plog.NewBizLogger("[module][submodule][business_logic]")
+    ctx := c.Request.Context()
+    
+    // 1. Input validation
+    if err := validateRequest(req); err != nil {
+        return nil, err
+    }
+    
+    // 2. Business rules validation
+    if err := validateBusinessRules(ctx, req, user); err != nil {
+        return nil, err
+    }
+    
+    // 3. Database operations
+    result, err := performDatabaseOperations(ctx, req, user)
+    if err != nil {
+        logger.Err(err).Msg("database operation failed")
+        return nil, err
+    }
+    
+    // 4. Return response
+    return &ResponseData{
+        // Response fields
+    }, nil
+}
+```
+
+## 🔧 Request/Response Patterns
+
+### Request Data Structure
+```go
+type RequestData struct {
+    Field1 string `json:"field1" binding:"required"`
+    Field2 int    `json:"field2" binding:"required,min=1"`
+    Field3 string `json:"field3,omitempty"`
+}
+```
+
+### Response Data Structure
+```go
+type ResponseData struct {
+    ID       string    `json:"id"`
+    CreatedAt time.Time `json:"created_at"`
+    // Other response fields
+}
+```
+
+### Error Handling
+```go
+// Use specific error messages
+return nil, errors.New("USER_NOT_FOUND")
+return nil, errors.New("INVALID_AMOUNT")
+return nil, errors.New("INSUFFICIENT_BALANCE")
+
+// Wrap errors with context
+return nil, errors.Wrap(err, "failed to create user")
+```
+
+## 🛡️ Security Patterns
+
+### Authentication Middleware
+```go
+// Always check authentication first
+user, exist := c.Get("current_user")
+if !exist {
+    code := response.ErrorResponse("Unauthorized")
+    c.JSON(code.Code, code)
+    c.Abort()
+    return
+}
+
+// Type assertion with validation
+u, ok := user.(*usercol.User)
+if !ok {
+    code := response.ErrorResponse("Unauthorized")
+    c.JSON(code.Code, code)
+    c.Abort()
+    return
+}
+```
+
+### Authorization Checks
+```go
+// Check user permissions
+if !user.HasPermission(requiredPermission) {
+    return nil, errors.New("INSUFFICIENT_PERMISSIONS")
+}
+
+// Check KYC status
+if !user.IsKYC {
+    return nil, errors.New("KYC_REQUIRED")
+}
+```
+
+### Input Validation
+```go
+// Validate required fields
+if req.Amount <= 0 {
+    return nil, errors.New("INVALID_AMOUNT")
+}
+
+// Validate business rules
+if req.Amount < minAmount {
+    return nil, errors.New("AMOUNT_TOO_SMALL")
+}
+```
+
+## 📊 Database Operations
+
+### CRUD Operations
+```go
+// Create
+newRecord := &schema.Record{
+    Field1: req.Field1,
+    Field2: req.Field2,
+    CreatedAt: time.Now(),
+}
+_, err := schema.Create(ctx, newRecord)
+
+// Read
+record, err := schema.FindByID(ctx, id)
+if err != nil {
+    if errors.Is(err, mongo.ErrNoDocuments) {
+        return nil, errors.New("RECORD_NOT_FOUND")
+    }
+    return nil, err
+}
+
+// Update
+record.Field1 = req.Field1
+_, err = schema.Update(ctx, record)
+
+// Delete
+err = schema.Delete(ctx, id)
+```
+
+### Transaction Handling
+```go
+// Use database transactions for complex operations
+session, err := client.StartSession()
+if err != nil {
+    return nil, err
+}
+defer session.EndSession(ctx)
+
+err = mongo.WithSession(ctx, session, func(sc mongo.SessionContext) error {
+    // Multiple database operations
+    return nil
+})
+```
+
+## 🔄 Router Patterns
+
+### Router Structure
+```go
+func AddRouter(r *gin.RouterGroup) {
+    // Public routes
+    r.POST("/endpoint", Handler())
+    
+    // Protected routes
+    r.GET("/protected", middleware.AuthMiddleware(), Handler())
+    
+    // KYC required routes
+    r.POST("/kyc-required", middleware.AuthMiddleware(), middleware.RequireKYC(), Handler())
+    
+    // Sub-routes
+    subGroup := r.Group("/submodule")
+    subGroup.GET("/endpoint", Handler())
+}
+```
+
+### Middleware Usage
+```go
+// Authentication required
+r.GET("/profile", middleware.AuthMiddleware(), GetProfile())
+
+// KYC required
+r.POST("/payment", middleware.AuthMiddleware(), middleware.RequireKYC(), ProcessPayment())
+
+// Admin only
+r.DELETE("/user", middleware.AuthMiddleware(), middleware.RequireAdmin(), DeleteUser())
+```
+
+## 📝 Logging Patterns
+
+### Logger Initialization
+```go
+logger := plog.NewBizLogger("[module][submodule][handler]")
+```
+
+### Logging Levels
+```go
+// Info logs for successful operations
+logger.Info().Str("user_id", userID).Msg("operation completed successfully")
+
+// Error logs for failures
+logger.Err(err).Str("user_id", userID).Msg("operation failed")
+
+// Debug logs for detailed information
+logger.Debug().Str("request_id", requestID).Msg("processing request")
+```
+
+### Structured Logging
+```go
+logger.Info().
+    Str("user_id", userID).
+    Str("operation", "create_account").
+    Int("amount", amount).
+    Msg("account created successfully")
+```
+
+## 🚫 Anti-Patterns
+
+### ❌ Don't Do This
+```go
+// ❌ No error handling
+func BadHandler() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        var req RequestData
+        c.BindJSON(&req) // No error handling
+        // Process without validation
+        c.JSON(200, "success")
+    }
+}
+
+// ❌ No authentication check
+func BadHandler() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        // Process without checking auth
+    }
+}
+
+// ❌ Hard-coded values
+func BadHandler() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        amount := 100000 // Should be configurable
+    }
+}
+
+// ❌ No logging
+func BadHandler() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        // No logging for debugging
+    }
+}
+```
+
+### ✅ Do This Instead
+```go
+// ✅ Proper error handling
+func GoodHandler() gin.HandlerFunc {
+    logger := plog.NewBizLogger("[module][handler]")
+    
+    return func(c *gin.Context) {
+        var req RequestData
+        if err := c.BindJSON(&req); err != nil {
+            code := response.ErrorResponse(err.Error())
+            c.JSON(code.Code, code)
+            c.Abort()
+            return
+        }
+        
+        res, err := doHandler(c, req)
+        if err != nil {
+            logger.Err(err).Msg("handler failed")
+            code := response.ErrorResponse(err.Error())
+            c.JSON(code.Code, code)
+            c.Abort()
+            return
+        }
+        
+        c.JSON(http.StatusOK, response.SuccessResponse(res))
+    }
+}
+
+// ✅ Proper authentication
+func GoodHandler() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        user, exist := c.Get("current_user")
+        if !exist {
+            code := response.ErrorResponse("Unauthorized")
+            c.JSON(code.Code, code)
+            c.Abort()
+            return
+        }
+        // Process with authenticated user
+    }
+}
+```
+
+## 🎯 Best Practices
+
+### 1. Error Handling
+- **Use specific error messages** for different failure scenarios
+- **Wrap errors** with context using `errors.Wrap()`
+- **Check for specific errors** like `mongo.ErrNoDocuments`
+- **Return meaningful error codes** to frontend
+
+### 2. Validation
+- **Validate input** at the handler level
+- **Validate business rules** in the business logic function
+- **Use struct tags** for request validation
+- **Check permissions** before processing
+
+### 3. Logging
+- **Log all important operations** with structured data
+- **Use appropriate log levels** (Info, Error, Debug)
+- **Include context** like user_id, request_id
+- **Log both success and failure** cases
+
+### 4. Database Operations
+- **Use transactions** for complex operations
+- **Handle database errors** appropriately
+- **Use proper indexes** for performance
+- **Validate data integrity** before saving
+
+### 5. Security
+- **Always authenticate** before processing
+- **Check permissions** for sensitive operations
+- **Validate input** to prevent injection attacks
+- **Use prepared statements** for database queries
+
+### 6. Performance
+- **Use appropriate database queries** (avoid N+1)
+- **Implement caching** where appropriate
+- **Use pagination** for list operations
+- **Optimize database indexes**
+
+## 📋 Handler Checklist
+
+### New Handler
+- [ ] Create proper request/response structs
+- [ ] Implement authentication check
+- [ ] Add input validation
+- [ ] Implement business logic function
+- [ ] Add proper error handling
+- [ ] Include structured logging
+- [ ] Add to router with appropriate middleware
+- [ ] Test with valid and invalid inputs
+- [ ] Test authentication scenarios
+- [ ] Test error conditions
+
+### Handler Updates
+- [ ] Maintain backward compatibility
+- [ ] Update error messages if needed
+- [ ] Add new validation rules
+- [ ] Update logging statements
+- [ ] Test all scenarios
+- [ ] Update documentation
+
+## 🔄 Common Patterns
+
+### Pagination
+```go
+type ListRequest struct {
+    Page  int `json:"page" binding:"min=1"`
+    Size  int `json:"size" binding:"min=1,max=100"`
+    Search string `json:"search,omitempty"`
+}
+
+func ListHandler() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        var req ListRequest
+        c.BindJSON(&req)
+        
+        // Set defaults
+        if req.Page == 0 {
+            req.Page = 1
+        }
+        if req.Size == 0 {
+            req.Size = 20
+        }
+        
+        // Calculate offset
+        offset := (req.Page - 1) * req.Size
+        
+        // Query with pagination
+        results, total, err := schema.FindWithPagination(ctx, req.Search, offset, req.Size)
+    }
+}
+```
+
+### File Upload
+```go
+func UploadHandler() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        file, header, err := c.Request.FormFile("file")
+        if err != nil {
+            code := response.ErrorResponse("file upload failed")
+            c.JSON(code.Code, code)
+            return
+        }
+        defer file.Close()
+        
+        // Validate file
+        if header.Size > maxFileSize {
+            code := response.ErrorResponse("file too large")
+            c.JSON(code.Code, code)
+            return
+        }
+        
+        // Process file
+        url, err := processFile(file, header)
+        if err != nil {
+            code := response.ErrorResponse("file processing failed")
+            c.JSON(code.Code, code)
+            return
+        }
+        
+        c.JSON(http.StatusOK, response.SuccessResponse(map[string]string{"url": url}))
+    }
+}
+```
+
+### Status Updates
+```go
+func UpdateStatusHandler() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        var req struct {
+            ID     string `json:"id" binding:"required"`
+            Status string `json:"status" binding:"required"`
+        }
+        
+        if err := c.BindJSON(&req); err != nil {
+            code := response.ErrorResponse(err.Error())
+            c.JSON(code.Code, code)
+            return
+        }
+        
+        // Validate status transition
+        if !isValidStatusTransition(currentStatus, req.Status) {
+            code := response.ErrorResponse("invalid status transition")
+            c.JSON(code.Code, code)
+            return
+        }
+        
+        // Update status
+        err := schema.UpdateStatus(ctx, req.ID, req.Status)
+        if err != nil {
+            code := response.ErrorResponse("status update failed")
+            c.JSON(code.Code, code)
+            return
+        }
+        
+        c.JSON(http.StatusOK, response.SuccessResponse("status updated"))
+    }
+}
+```

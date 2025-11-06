@@ -1,0 +1,687 @@
+---
+alwaysApply: true
+---
+
+# Storage Layer Rules
+
+## 📁 Structure & Organization
+
+### Directory Structure
+```
+internal/
+├── mongodb/                 # MongoDB operations and models
+│   ├── builder/            # Query builder utilities
+│   ├── field/              # Field definitions and utilities
+│   ├── utils/              # MongoDB utility functions
+│   ├── collection.go       # Collection operations
+│   ├── connection.go       # Database connection management
+│   ├── database.go         # Database operations
+│   ├── model.go            # Base model definitions
+│   ├── operation.go        # CRUD operations
+│   └── transaction.go      # Transaction handling
+└── utils/                  # General utilities
+    ├── mongodb.go          # MongoDB utilities
+    ├── pagination.go       # Pagination helpers
+    └── time.go             # Time utilities
+
+schema/                     # Data models and schemas
+├── usercol/               # User collection
+│   ├── model.go           # User model
+│   ├── query.go           # User queries
+│   └── const.go           # User constants
+├── product/               # Product collections
+│   ├── original/          # Original products
+│   └── derivative/        # Derivative products
+├── payment/               # Payment collections
+├── transaction/           # Transaction collections
+└── [other_collections]/   # Other domain collections
+```
+
+### File Naming Convention
+- **Model files**: Use `model.go` for data structures
+- **Query files**: Use `query.go` for database queries
+- **Enum files**: Use `enum.go` for enumerations
+- **Constant files**: Use `const.go` for constants
+- **Collection files**: Use descriptive names (e.g., `usercol`, `productcol`)
+
+## 🗄️ Database Patterns
+
+### 1. MongoDB Collection Structure
+```go
+package usercol
+
+import (
+    "api/internal/mongodb"
+    "time"
+)
+
+type User struct {
+    mongodb.DefaultModel `json:",inline" bson:",inline,omitnested"`
+    CreatedAt            time.Time `json:"created_at" bson:"created_at,omitempty"`
+    UpdatedAt            time.Time `json:"updated_at" bson:"updated_at,omitempty"`
+    
+    // Business fields
+    FullName string `json:"full_name" bson:"full_name"`
+    Email    string `json:"email" bson:"email"`
+    // ... other fields
+}
+
+func (User) CollectionName() string {
+    return "user"
+}
+```
+
+### 2. Collection Operations
+```go
+// Get collection instance
+func Collection() *mongodb.Collection {
+    return mongodb.CollectionByName(mongodb.GetDatabaseName(), "user")
+}
+
+// Create operation
+func Create(ctx context.Context, user *User) (interface{}, error) {
+    return Collection().CreateWithCtx(ctx, user)
+}
+
+// Find by ID
+func FindWithUserID(ctx context.Context, userID string) (*User, error) {
+    var user User
+    err := Collection().FindByIDWithCtx(ctx, userID, &user)
+    if err != nil {
+        return nil, err
+    }
+    return &user, nil
+}
+
+// Find with filter
+func FindWithEmail(ctx context.Context, email string) (*User, error) {
+    var user User
+    err := Collection().FirstWithCtx(ctx, bson.M{"email": email}, &user)
+    if err != nil {
+        return nil, err
+    }
+    return &user, nil
+}
+
+// Update operation
+func Update(ctx context.Context, user *User) error {
+    return Collection().UpdateWithCtx(ctx, user)
+}
+
+// Delete operation
+func Delete(ctx context.Context, user *User) error {
+    return Collection().DeleteWithCtx(ctx, user)
+}
+```
+
+### 3. Query Patterns
+```go
+// Simple find with pagination
+func FindWithPagination(ctx context.Context, filter bson.M, offset, limit int) ([]*User, int64, error) {
+    var users []*User
+    
+    // Get total count
+    total, err := Collection().CountWithCtx(ctx, filter)
+    if err != nil {
+        return nil, 0, err
+    }
+    
+    // Find with pagination
+    opts := options.Find().
+        SetSkip(int64(offset)).
+        SetLimit(int64(limit)).
+        SetSort(bson.M{"created_at": -1})
+    
+    err = Collection().SimpleFindWithCtx(ctx, &users, filter, opts)
+    if err != nil {
+        return nil, 0, err
+    }
+    
+    return users, total, nil
+}
+
+// Aggregation queries
+func FindActiveUsers(ctx context.Context) ([]*User, error) {
+    var users []*User
+    
+    pipeline := []bson.M{
+        {"$match": bson.M{"is_delete": false}},
+        {"$sort": bson.M{"created_at": -1}},
+    }
+    
+    err := Collection().SimpleAggregateWithCtx(ctx, &users, pipeline...)
+    return users, err
+}
+```
+
+## 🔄 Redis Patterns
+
+### 1. Redis Operations
+```go
+package redis
+
+import (
+    "context"
+    "encoding/json"
+    "time"
+)
+
+// Set object with expiration
+func SetObject(ctx context.Context, key string, value interface{}, expirationSecond int) error {
+    jsonStr, err := json.Marshal(value)
+    if err != nil {
+        return err
+    }
+    return client.Set(ctx, key, jsonStr, time.Duration(expirationSecond)*time.Second).Err()
+}
+
+// Get object
+func GetObject(ctx context.Context, key string, refObj interface{}) (bool, error) {
+    bytes, err := client.Get(ctx, key).Bytes()
+    if err != nil {
+        if err == redis.Nil {
+            return false, nil // Key not exists
+        }
+        return false, err
+    }
+    
+    err = json.Unmarshal(bytes, &refObj)
+    if err != nil {
+        return false, err
+    }
+    return true, nil
+}
+
+// List operations
+func LPushList(ctx context.Context, key string, value interface{}) error {
+    jsonStr, err := json.Marshal(value)
+    if err != nil {
+        return err
+    }
+    return client.LPush(ctx, key, jsonStr).Err()
+}
+
+func LPopList(ctx context.Context, key string) (interface{}, error) {
+    cmd := client.LPop(ctx, key)
+    return cmd.Val(), cmd.Err()
+}
+```
+
+### 2. Caching Patterns
+```go
+// Cache with fallback
+func GetUserWithCache(ctx context.Context, userID string) (*User, error) {
+    var user User
+    cacheKey := fmt.Sprintf("user:%s", userID)
+    
+    // Try to get from cache
+    exists, err := redis.GetObject(ctx, cacheKey, &user)
+    if err != nil {
+        return nil, err
+    }
+    
+    if exists {
+        return &user, nil
+    }
+    
+    // Fallback to database
+    user, err = usercol.FindWithUserID(ctx, userID)
+    if err != nil {
+        return nil, err
+    }
+    
+    // Cache for 1 hour
+    redis.SetObject(ctx, cacheKey, user, 3600)
+    return &user, nil
+}
+```
+
+## 🔐 Security Patterns
+
+### 1. Data Encryption
+```go
+// Hash password
+func HashPassword(password string) (string, error) {
+    hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+    if err != nil {
+        return "", err
+    }
+    return string(hashedPassword), nil
+}
+
+// Verify password
+func VerifyPassword(hashedPassword, password string) error {
+    return bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
+}
+
+// Encrypt sensitive data
+func EncryptSensitiveData(data string) (string, error) {
+    return encrypt.EncryptRSA(data)
+}
+
+// Decrypt sensitive data
+func DecryptSensitiveData(encryptedData string) (string, error) {
+    return encrypt.DecryptRSA(encryptedData)
+}
+```
+
+### 2. JWT Token Management
+```go
+// Generate JWT token
+func GenerateJWTToken(secret, email, sessionID, deviceID, userType, platform string, lifetime int) (string, error) {
+    return jwt.GenerateJWTToken(secret, email, sessionID, deviceID, userType, platform, lifetime)
+}
+
+// Validate JWT token
+func ValidateJWTToken(tokenString string) (*jwt.Claims, error) {
+    return jwt.ValidateJWTToken(tokenString)
+}
+```
+
+## 📊 Data Modeling Patterns
+
+### 1. Base Model Structure
+```go
+type DefaultModel struct {
+    ID        primitive.ObjectID `json:"id" bson:"_id,omitempty"`
+    CreatedAt time.Time         `json:"created_at" bson:"created_at,omitempty"`
+    UpdatedAt time.Time         `json:"updated_at" bson:"updated_at,omitempty"`
+}
+
+func (m *DefaultModel) GetIDString() string {
+    return m.ID.Hex()
+}
+
+func (m *DefaultModel) PrepareID(id interface{}) (interface{}, error) {
+    if id == nil {
+        return primitive.NewObjectID(), nil
+    }
+    
+    switch v := id.(type) {
+    case string:
+        return primitive.ObjectIDFromHex(v)
+    case primitive.ObjectID:
+        return v, nil
+    default:
+        return nil, errors.New("invalid id type")
+    }
+}
+```
+
+### 2. Enum Patterns
+```go
+type UserType int
+
+const (
+    UserTypeIndividual UserType = iota
+    UserTypeOrganization
+    UserTypeAgency
+)
+
+func (u UserType) String() string {
+    switch u {
+    case UserTypeIndividual:
+        return "individual"
+    case UserTypeOrganization:
+        return "organization"
+    case UserTypeAgency:
+        return "agency"
+    default:
+        return "unknown"
+    }
+}
+
+func StringToUserType(s string) (UserType, error) {
+    switch s {
+    case "individual":
+        return UserTypeIndividual, nil
+    case "organization":
+        return UserTypeOrganization, nil
+    case "agency":
+        return UserTypeAgency, nil
+    default:
+        return 0, errors.New("invalid user type")
+    }
+}
+```
+
+### 3. Validation Patterns
+```go
+// Model validation
+func (u *User) Validate() error {
+    if u.Email == "" {
+        return errors.New("email is required")
+    }
+    
+    if !utils.IsEmailValid(u.Email) {
+        return errors.New("invalid email format")
+    }
+    
+    if u.FullName == "" {
+        return errors.New("full name is required")
+    }
+    
+    return nil
+}
+
+// Business rule validation
+func (u *User) CanPerformAction(action string) error {
+    if u.IsDelete {
+        return errors.New("user is deleted")
+    }
+    
+    switch action {
+    case "kyc":
+        if u.IsKYC {
+            return errors.New("user already KYC verified")
+        }
+    case "payment":
+        if !u.IsKYC {
+            return errors.New("KYC required for payment")
+        }
+    }
+    
+    return nil
+}
+```
+
+## 🔄 Transaction Patterns
+
+### 1. MongoDB Transactions
+```go
+func TransferMoney(ctx context.Context, fromUserID, toUserID string, amount float64) error {
+    session, err := mongodb.GetClient().StartSession()
+    if err != nil {
+        return err
+    }
+    defer session.EndSession(ctx)
+    
+    return mongo.WithSession(ctx, session, func(sc mongo.SessionContext) error {
+        // Start transaction
+        if err := session.StartTransaction(); err != nil {
+            return err
+        }
+        
+        // Debit from user
+        fromUser, err := usercol.FindWithUserID(sc, fromUserID)
+        if err != nil {
+            return err
+        }
+        
+        if fromUser.Balance < amount {
+            return errors.New("insufficient balance")
+        }
+        
+        fromUser.Balance -= amount
+        if err := usercol.Update(sc, fromUser); err != nil {
+            session.AbortTransaction(sc)
+            return err
+        }
+        
+        // Credit to user
+        toUser, err := usercol.FindWithUserID(sc, toUserID)
+        if err != nil {
+            session.AbortTransaction(sc)
+            return err
+        }
+        
+        toUser.Balance += amount
+        if err := usercol.Update(sc, toUser); err != nil {
+            session.AbortTransaction(sc)
+            return err
+        }
+        
+        // Commit transaction
+        return session.CommitTransaction(sc)
+    })
+}
+```
+
+### 2. Redis Transactions
+```go
+func UpdateUserCache(ctx context.Context, user *User) error {
+    pipe := redis.GetClient().Pipeline()
+    
+    // Update user cache
+    userKey := fmt.Sprintf("user:%s", user.GetIDString())
+    userData, _ := json.Marshal(user)
+    pipe.Set(ctx, userKey, userData, time.Hour)
+    
+    // Update user list cache
+    listKey := "users:active"
+    pipe.SAdd(ctx, listKey, user.GetIDString())
+    
+    // Execute pipeline
+    _, err := pipe.Exec(ctx)
+    return err
+}
+```
+
+## 🚫 Anti-Patterns
+
+### ❌ Don't Do This
+```go
+// ❌ No error handling
+func BadCreate(user *User) {
+    Collection().Create(user) // No error handling
+}
+
+// ❌ No context usage
+func BadFind(id string) *User {
+    var user User
+    Collection().FindByID(id, &user) // No context
+    return &user
+}
+
+// ❌ Hard-coded values
+func BadFind() []*User {
+    var users []*User
+    Collection().SimpleFind(&users, bson.M{"status": "active"}) // Hard-coded filter
+    return users
+}
+
+// ❌ No validation
+func BadCreate(user *User) {
+    Collection().Create(user) // No validation
+}
+
+// ❌ No transaction for related operations
+func BadTransfer(from, to *User, amount float64) {
+    from.Balance -= amount
+    usercol.Update(from)
+    to.Balance += amount
+    usercol.Update(to) // Not atomic
+}
+```
+
+### ✅ Do This Instead
+```go
+// ✅ Proper error handling
+func GoodCreate(ctx context.Context, user *User) error {
+    if err := user.Validate(); err != nil {
+        return err
+    }
+    
+    _, err := Collection().CreateWithCtx(ctx, user)
+    return err
+}
+
+// ✅ Context usage
+func GoodFind(ctx context.Context, id string) (*User, error) {
+    var user User
+    err := Collection().FindByIDWithCtx(ctx, id, &user)
+    if err != nil {
+        return nil, err
+    }
+    return &user, nil
+}
+
+// ✅ Configurable filters
+func GoodFind(ctx context.Context, filter bson.M) ([]*User, error) {
+    var users []*User
+    err := Collection().SimpleFindWithCtx(ctx, &users, filter)
+    return users, err
+}
+
+// ✅ Proper validation
+func GoodCreate(ctx context.Context, user *User) error {
+    if err := user.Validate(); err != nil {
+        return err
+    }
+    
+    _, err := Collection().CreateWithCtx(ctx, user)
+    return err
+}
+
+// ✅ Transaction for related operations
+func GoodTransfer(ctx context.Context, fromUserID, toUserID string, amount float64) error {
+    return TransferMoney(ctx, fromUserID, toUserID, amount)
+}
+```
+
+## 🎯 Best Practices
+
+### 1. Data Modeling
+- **Use embedded structs** for common fields (DefaultModel)
+- **Define collection names** in model methods
+- **Use proper BSON tags** for MongoDB fields
+- **Implement validation methods** for business rules
+- **Use enums** for status and type fields
+
+### 2. Database Operations
+- **Always use context** for database operations
+- **Handle errors properly** with specific error types
+- **Use transactions** for related operations
+- **Implement proper indexing** for performance
+- **Use aggregation** for complex queries
+
+### 3. Caching Strategy
+- **Cache frequently accessed data** with appropriate TTL
+- **Use cache-aside pattern** with database fallback
+- **Invalidate cache** when data changes
+- **Use Redis pipelines** for batch operations
+- **Implement cache warming** for critical data
+
+### 4. Security
+- **Encrypt sensitive data** at rest
+- **Hash passwords** with bcrypt
+- **Use JWT tokens** for authentication
+- **Validate all inputs** before processing
+- **Implement proper access controls**
+
+### 5. Performance
+- **Use appropriate indexes** for queries
+- **Implement pagination** for large datasets
+- **Use aggregation pipelines** for complex operations
+- **Cache frequently accessed data**
+- **Optimize query patterns**
+
+## 📋 Storage Checklist
+
+### New Collection
+- [ ] Create model with proper BSON tags
+- [ ] Implement CollectionName() method
+- [ ] Define CRUD operations with context
+- [ ] Add validation methods
+- [ ] Create query functions
+- [ ] Add proper error handling
+- [ ] Implement indexing strategy
+- [ ] Add caching if needed
+- [ ] Write unit tests
+- [ ] Document usage patterns
+
+### Collection Updates
+- [ ] Maintain backward compatibility
+- [ ] Update validation rules
+- [ ] Add migration if needed
+- [ ] Update indexes
+- [ ] Test all operations
+- [ ] Update documentation
+
+## 🔄 Common Patterns
+
+### Pagination
+```go
+type PaginationParams struct {
+    Page  int `json:"page" binding:"min=1"`
+    Size  int `json:"size" binding:"min=1,max=100"`
+    Sort  string `json:"sort,omitempty"`
+    Order string `json:"order,omitempty"`
+}
+
+func FindWithPagination(ctx context.Context, filter bson.M, params PaginationParams) ([]*User, int64, error) {
+    // Calculate offset
+    offset := (params.Page - 1) * params.Size
+    
+    // Get total count
+    total, err := Collection().CountWithCtx(ctx, filter)
+    if err != nil {
+        return nil, 0, err
+    }
+    
+    // Build sort options
+    sort := bson.M{"created_at": -1} // default
+    if params.Sort != "" {
+        order := 1
+        if params.Order == "desc" {
+            order = -1
+        }
+        sort = bson.M{params.Sort: order}
+    }
+    
+    // Find with pagination
+    opts := options.Find().
+        SetSkip(int64(offset)).
+        SetLimit(int64(params.Size)).
+        SetSort(sort)
+    
+    var users []*User
+    err = Collection().SimpleFindWithCtx(ctx, &users, filter, opts)
+    return users, total, err
+}
+```
+
+### Soft Delete
+```go
+func SoftDelete(ctx context.Context, user *User, reasonCode, reasonNote string) error {
+    user.IsDelete = true
+    user.DeletedAt = time.Now()
+    user.DeleteReasonCode = reasonCode
+    user.DeleteReasonNote = reasonNote
+    
+    return Collection().UpdateWithCtx(ctx, user)
+}
+
+func FindActiveUsers(ctx context.Context) ([]*User, error) {
+    var users []*User
+    filter := bson.M{"is_delete": false}
+    err := Collection().SimpleFindWithCtx(ctx, &users, filter)
+    return users, err
+}
+```
+
+### Audit Trail
+```go
+type AuditLog struct {
+    mongodb.DefaultModel
+    UserID    string    `json:"user_id" bson:"user_id"`
+    Action    string    `json:"action" bson:"action"`
+    Resource  string    `json:"resource" bson:"resource"`
+    OldData   bson.M    `json:"old_data" bson:"old_data,omitempty"`
+    NewData   bson.M    `json:"new_data" bson:"new_data,omitempty"`
+    Timestamp time.Time `json:"timestamp" bson:"timestamp"`
+}
+
+func LogAudit(ctx context.Context, userID, action, resource string, oldData, newData bson.M) error {
+    audit := &AuditLog{
+        UserID:    userID,
+        Action:    action,
+        Resource:  resource,
+        OldData:   oldData,
+        NewData:   newData,
+        Timestamp: time.Now(),
+    }
+    
+    return auditcol.CreateWithCtx(ctx, audit)
+}
+```

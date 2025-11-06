@@ -1,0 +1,14 @@
+.env
+.idea
+
+api
+cmd
+_.gtel.vn.cer
+service-account.json
+iap-apple-key.p8
+
+# Air hot reload
+tmp/
+build-errors.log
+coverage.out
+coverage.html
