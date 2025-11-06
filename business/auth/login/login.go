@@ -13,7 +13,6 @@ import (
 	"api/schema/usercol"
 	"api/schema/userdevicecol"
 	"api/schema/usersessioncol"
-	"api/types"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -32,8 +31,8 @@ type LoginRequestData struct {
 }
 
 type LoginResponseData struct {
-	AccessToken string     `json:"access_token"`
-	User        types.User `json:"user"`
+	AccessToken string       `json:"access_token"`
+	User        usercol.User `json:"user"`
 }
 
 func Login() gin.HandlerFunc {
@@ -168,41 +167,12 @@ func doLogin(c *gin.Context, data LoginRequestData) (*LoginResponseData, error) 
 		os.Getenv("KEY_API_KEY"),
 		user.GetIDString(),
 		"",
-		"fanxipan",
+		"btcland",
 		JWT_LIFETIME,
 	)
 
 	return &LoginResponseData{
-		User: types.User{
-			ID:                      user.GetIDString(),
-			CreatedAt:               user.CreatedAt,
-			UpdatedAt:               user.UpdatedAt,
-			CitizenPid:              user.CitizenPid,
-			IdCardExpireDate:        user.IdCardExpireDate,
-			DateOfIssue:             user.DateOfIssue,
-			IssuingAuthority:        user.IssuingAuthority,
-			NationalityCode:         user.NationalityCode,
-			PermanentAddress:        user.PermanentAddress,
-			PermanentVillageCode:    user.PermanentVillageCode,
-			PermanentVillageText:    user.PermanentVillageText,
-			PermanentDistrictCode:   user.PermanentDistrictCode,
-			PermanentDistrictText:   user.PermanentDistrictText,
-			PermanentCityCode:       user.PermanentCityCode,
-			PermanentCityText:       user.PermanentCityText,
-			LivingPlaceAddress:      user.LivingPlaceAddress,
-			LivingPlaceVillageCode:  user.LivingPlaceVillageCode,
-			LivingPlaceVillageText:  user.LivingPlaceVillageText,
-			LivingPlaceDistrictCode: user.LivingPlaceDistrictCode,
-			LivingPlaceDistrictText: user.LivingPlaceDistrictText,
-			LivingPlaceCityCode:     user.LivingPlaceCityCode,
-			LivingPlaceCityText:     user.LivingPlaceCityText,
-			IdentifyLevel:           user.IdentifyLevel,
-			IsKYC:                   user.IsKYC,
-			IsShareInfo:             user.IsShareInfo,
-			FullName:                user.FullName,
-			Email:                   user.Email,
-			UserType:                user.UserType.String(),
-		},
+		User:        *user,
 		AccessToken: apiToken,
 	}, nil
 }

@@ -86,3 +86,19 @@ func EnsureBucketExists(bucketName string) error {
 func GetClient() *minio.Client {
 	return client.client
 }
+
+// DownloadFile downloads a file from MinIO and returns the file data as bytes
+func DownloadFile(bucket, key string) ([]byte, error) {
+	object, err := client.client.GetObject(context.Background(), bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get object %s: %w", key, err)
+	}
+	defer object.Close()
+
+	buf, err := io.ReadAll(object)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read object %s: %w", key, err)
+	}
+
+	return buf, nil
+}

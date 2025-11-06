@@ -53,15 +53,19 @@ type NFT struct {
 }
 
 type User struct {
-	CreatedAt time.Time `json:"created_at,omitempty" bson:"created_at,omitempty"`
-	UpdatedAt time.Time `json:"updated_at,omitempty" bson:"updated_at,omitempty"`
-	DeletedAt time.Time `json:"deleted_at,omitempty" bson:"deleted_at,omitempty"`
-
-	ID string `json:"id,omitempty" bson:"id,omitempty"`
-	
+	ID            string    `json:"id,omitempty" bson:"id,omitempty"`
+	CreatedAt     time.Time `json:"created_at,omitempty" bson:"created_at,omitempty"`
+	UpdatedAt     time.Time `json:"updated_at,omitempty" bson:"updated_at,omitempty"`
+	DeletedAt     time.Time `json:"deleted_at,omitempty" bson:"deleted_at,omitempty"`
+	FullName      string    `json:"full_name" bson:"full_name"`
+	Email         string    `json:"email" bson:"email"`
+	PhoneNumber   string    `json:"phone_number" bson:"phone_number"`
+	Role          string    `json:"role" bson:"role"`
+	IsVerifyEmail bool      `json:"is_verify_email" bson:"is_verify_email"`
+	IsVerifyPhone bool      `json:"is_verify_phone" bson:"is_verify_phone"`
+	IsSetPassword bool      `json:"is_set_password" bson:"is_set_password"`
+	IsDelete      bool      `json:"is_delete" bson:"is_delete"`
 	// Standard information
-	FullName                string `json:"full_name" bson:"full_name"`                                   // Họ và tên đầy đủ của công dân
-	Email                   string `json:"email" bson:"email"`                                           // Email của công dân
 	BirthDate               string `json:"birth_date" bson:"birth_date"`                                 // Ngày tháng năm sinh của công dân, định dạng dd-MM-yyyy
 	IdCardExpireDate        string `json:"id_card_expire_date" bson:"id_card_expire_date"`               // Ngày hết hạn của CCCD (mới nhất đến thời điểm chia sẻ)
 	CitizenPid              string `json:"citizen_id" bson:"citizen_id"`                                 // Số định danh/ CCCD của công dân
@@ -83,11 +87,7 @@ type User struct {
 	LivingPlaceCityCode     string `json:"living_place_city_code" bson:"living_place_city_code"`         // Mã tỉnh nơi ở hiện tại (Ref danh mục tỉnh)
 	LivingPlaceCityText     string `json:"living_place_city_text" bson:"living_place_city_text"`         // Tên tỉnh nơi ở hiện tại
 
-	IdentifyLevel int    `json:"identify_level,omitempty" bson:"identify_level,omitempty"`
-	UserType      string `json:"user_type,omitempty" bson:"user_type,omitempty"`
-
-	IsKYC       bool `json:"is_kyc,omitempty" bson:"is_kyc"`
-	IsShareInfo bool `json:"is_share_info" bson:"is_share_info"`
+	IdentifyLevel int `json:"identify_level,omitempty" bson:"identify_level,omitempty"`
 }
 
 type ChipCardData struct {

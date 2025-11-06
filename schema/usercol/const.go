@@ -49,3 +49,46 @@ func (i UserType) Text() string {
 		return ""
 	}
 }
+
+type Role string
+
+const (
+	RoleEmployee          Role = "employee"
+	RoleManager           Role = "manager"
+	RoleLeader            Role = "leader"
+	RoleAssistantDirector Role = "assistant_director"
+)
+
+func StringToRole(r string) (Role, error) {
+	switch r {
+	case "employee":
+		return RoleEmployee, nil
+	case "manager":
+		return RoleManager, nil
+	case "leader":
+		return RoleLeader, nil
+	case "assistant_director":
+		return RoleAssistantDirector, nil
+	default:
+		return "", fmt.Errorf("unknown Role: %s", r)
+	}
+}
+
+func (r Role) String() string {
+	return string(r)
+}
+
+func (r Role) Text() string {
+	switch r {
+	case RoleEmployee:
+		return "Nhân viên"
+	case RoleManager:
+		return "Quản lý"
+	case RoleLeader:
+		return "Lãnh đạo"
+	case RoleAssistantDirector:
+		return "Trợ lý giám đốc"
+	default:
+		return ""
+	}
+}

@@ -171,7 +171,14 @@ func findOrCreateUser(ctx context.Context, info *googleUser, logger plog.Logger)
 				ProviderID:   info.ID,
 				ProviderName: oauth2.Google,
 			},
-			UserType: usercol.UserTypeGeneral,
+			Role:          usercol.RoleEmployee,
+			IsVerifyEmail: true,
+			IsVerifyPhone: true,
+			IsSetPassword: false,
+			IsDelete:      false,
+			DeletedAt:     time.Time{},
+			CreatedAt:     time.Time{},
+			UpdatedAt:     time.Time{},
 		}
 		_, err = usercol.Create(ctx, newUser)
 		if err != nil {
